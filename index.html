@@ -8,12 +8,20 @@
     <title>Hello World!</title>
   </head>
   <body>
-    <h1>Hello World!</h1>
-    We are using Node.js <span id="node-version"></span>,
-    Chromium <span id="chrome-version"></span>,
-    and Electron <span id="electron-version"></span>.
+    <div class="container">
+      <h1>CSS File Reader</h1>
+      <div class="file-input">
+        <button id="openButton">Open CSS File</button>
+      </div>
+      <div class="content-display">
+        <h3>CSS Content:</h3>
+        <textarea id="cssContent" spellcheck="false"></textarea>
+        <div class="button-container">
+          <button id="saveButton" disabled>Save Changes</button>
+        </div>
+      </div>
+    </div>
 
-    <!-- You can also require other files to run in this process -->
     <script src="./renderer.js"></script>
   </body>
 </html>

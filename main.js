@@ -1,5 +1,6 @@
 // Modules to control application life and create native browser window
-const { app, BrowserWindow } = require('electron')
+const { app, BrowserWindow, ipcMain } = require('electron')
+const fs = require('fs').promises
 const path = require('node:path')
 
 function createWindow () {
@@ -8,8 +9,15 @@ function createWindow () {
     width: 800,
     height: 600,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js')
-    }
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      enableRemoteModule: false
+    },
+    // Enable native file dialogs
+    properties: ['openFile', 'saveFile']
   })
 
   // and load the index.html of the app.
@@ -41,3 +49,41 @@ app.on('window-all-closed', function () {
 
 // In this file you can include the rest of your app's specific main process
 // code. You can also put them in separate files and require them here.
+
+const { dialog } = require('electron')
+let currentFilePath = null;
+
+// Handle opening CSS file
+ipcMain.handle('open-css-file', async (event) => {
+  try {
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [{ name: 'CSS Files', extensions: ['css'] }]
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return { success: false, error: 'No file selected' };
+    }
+
+    const filePath = result.filePaths[0];
+    currentFilePath = filePath;
+    const content = await fs.readFile(filePath, 'utf8');
+    return { success: true, content };
+  } catch (error) {
+    currentFilePath = null;
+    return { success: false, error: error.message };
+  }
+});
+
+// Handle saving CSS file
+ipcMain.handle('save-css-file', async (event, { content }) => {
+  if (!currentFilePath) {
+    return { success: false, error: 'No file is currently loaded' };
+  }
+  try {
+    await fs.writeFile(currentFilePath, content, 'utf8')
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: error.message }
+  }
+})
