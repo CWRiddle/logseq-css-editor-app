@@ -1,7 +1,31 @@
 // Modules to control application life and create native browser window
-const { app, BrowserWindow, ipcMain } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog } = require('electron')
 const fs = require('fs').promises
 const path = require('node:path')
+
+// CSS parsing and generation utilities
+const CSS_CELL_REGEX = /\/\* @CELL_START: (.*?) \*\/\n\/\* @TITLE: (.*?) \*\/\n([\s\S]*?)\/\* @CELL_END \*\//g;
+
+function parseCssIntoCells(cssContent) {
+  const cells = [];
+  let match;
+  
+  while ((match = CSS_CELL_REGEX.exec(cssContent)) !== null) {
+    cells.push({
+      id: match[1],
+      title: match[2],
+      content: match[3].trim()
+    });
+  }
+  
+  return cells;
+}
+
+function generateCssFromCells(cells) {
+  return cells.map(cell => {
+    return `/* @CELL_START: ${cell.id} */\n/* @TITLE: ${cell.title} */\n${cell.content}\n/* @CELL_END */`;
+  }).join('\n\n');
+}
 
 function createWindow () {
   // Create the browser window.
@@ -50,11 +74,16 @@ app.on('window-all-closed', function () {
 // In this file you can include the rest of your app's specific main process
 // code. You can also put them in separate files and require them here.
 
-const { dialog } = require('electron')
 let currentFilePath = null;
 
+// Handle creating new CSS file
+ipcMain.handle('new-file', async () => {
+  currentFilePath = null;
+  return { success: true };
+});
+
 // Handle opening CSS file
-ipcMain.handle('open-css-file', async (event) => {
+ipcMain.handle('open-css-file', async () => {
   try {
     const result = await dialog.showOpenDialog({
       properties: ['openFile'],
@@ -68,7 +97,20 @@ ipcMain.handle('open-css-file', async (event) => {
     const filePath = result.filePaths[0];
     currentFilePath = filePath;
     const content = await fs.readFile(filePath, 'utf8');
-    return { success: true, content };
+    
+    // Parse CSS content into cells
+    const cells = parseCssIntoCells(content);
+    
+    // If no cells found, create a single cell with all content
+    if (cells.length === 0 && content.trim()) {
+      cells.push({
+        id: Date.now().toString(),
+        title: 'Imported Styles',
+        content: content.trim()
+      });
+    }
+    
+    return { success: true, cells };
   } catch (error) {
     currentFilePath = null;
     return { success: false, error: error.message };
@@ -76,14 +118,27 @@ ipcMain.handle('open-css-file', async (event) => {
 });
 
 // Handle saving CSS file
-ipcMain.handle('save-css-file', async (event, { content }) => {
-  if (!currentFilePath) {
-    return { success: false, error: 'No file is currently loaded' };
-  }
+ipcMain.handle('save-css-file', async (event, { cells }) => {
   try {
-    await fs.writeFile(currentFilePath, content, 'utf8')
-    return { success: true }
+    // If no current file path, show save dialog
+    if (!currentFilePath) {
+      const result = await dialog.showSaveDialog({
+        filters: [{ name: 'CSS Files', extensions: ['css'] }]
+      });
+      
+      if (result.canceled || !result.filePath) {
+        return { success: false, error: 'Save operation cancelled' };
+      }
+      
+      currentFilePath = result.filePath;
+    }
+    
+    // Generate CSS content from cells
+    const content = generateCssFromCells(cells);
+    
+    await fs.writeFile(currentFilePath, content, 'utf8');
+    return { success: true, filePath: currentFilePath };
   } catch (error) {
-    return { success: false, error: error.message }
+    return { success: false, error: error.message };
   }
-})
+});

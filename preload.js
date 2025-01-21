@@ -4,9 +4,11 @@ const { contextBridge, ipcRenderer } = require('electron')
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld(
   'api', {
+    newFile: () => 
+      ipcRenderer.invoke('new-file'),
     openCssFile: () => 
       ipcRenderer.invoke('open-css-file'),
-    saveCssFile: (content) => 
-      ipcRenderer.invoke('save-css-file', { content })
+    saveCssFile: (cells) => 
+      ipcRenderer.invoke('save-css-file', { cells })
   }
 )

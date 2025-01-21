@@ -9,18 +9,40 @@
   </head>
   <body>
     <div class="container">
-      <h1>CSS File Reader</h1>
-      <div class="file-input">
-        <button id="openButton">Open CSS File</button>
-      </div>
-      <div class="content-display">
-        <h3>CSS Content:</h3>
-        <textarea id="cssContent" spellcheck="false"></textarea>
-        <div class="button-container">
-          <button id="saveButton" disabled>Save Changes</button>
+      <header class="app-header">
+        <h1>CSS Editor</h1>
+        <div class="header-buttons">
+          <button id="newFileButton">New File</button>
+          <button id="openButton">Open File</button>
+          <button id="saveButton" disabled>Save File</button>
+        </div>
+      </header>
+      
+      <div class="cells-container">
+        <div class="cells-header">
+          <h2>CSS Cells</h2>
+          <button id="addCellButton">Add Cell</button>
+        </div>
+        <div id="cellsList" class="cells-list">
+          <!-- Cells will be dynamically added here -->
         </div>
       </div>
     </div>
+
+    <!-- Cell Template -->
+    <template id="cellTemplate">
+      <div class="cell" data-cell-id="">
+        <div class="cell-header">
+          <input type="text" class="cell-title" placeholder="Enter cell title...">
+          <div class="cell-controls">
+            <button class="move-up-button">↑</button>
+            <button class="move-down-button">↓</button>
+            <button class="delete-cell-button">×</button>
+          </div>
+        </div>
+        <textarea class="cell-editor" spellcheck="false"></textarea>
+      </div>
+    </template>
 
     <script src="./renderer.js"></script>
   </body>
