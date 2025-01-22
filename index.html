@@ -3,9 +3,10 @@
   <head>
     <meta charset="UTF-8">
     <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' blob:; style-src 'self' 'unsafe-inline'; worker-src blob:">
     <link href="./styles.css" rel="stylesheet">
-    <title>Hello World!</title>
+    <link rel="stylesheet" href="./node_modules/monaco-editor/min/vs/editor/editor.main.css">
+    <title>CSS Editor</title>
   </head>
   <body>
     <div class="container">
@@ -40,10 +41,18 @@
             <button class="delete-cell-button">×</button>
           </div>
         </div>
-        <textarea class="cell-editor" spellcheck="false"></textarea>
+        <div class="monaco-editor-container"></div>
       </div>
     </template>
 
+    <script>
+        var require = {
+            paths: { 'vs': './node_modules/monaco-editor/min/vs' }
+        };
+    </script>
+    <script src="./node_modules/monaco-editor/min/vs/loader.js"></script>
+    <script src="./node_modules/monaco-editor/min/vs/editor/editor.main.nls.js"></script>
+    <script src="./node_modules/monaco-editor/min/vs/editor/editor.main.js"></script>
     <script src="./renderer.js"></script>
   </body>
 </html>

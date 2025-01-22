@@ -1,6 +1,17 @@
+// Configure Monaco's base path for workers
+self.MonacoEnvironment = {
+    getWorkerUrl: function (moduleId, label) {
+        if (label === 'css' || label === 'scss' || label === 'less') {
+            return './node_modules/monaco-editor/min/vs/language/css/css.worker.js';
+        }
+        return './node_modules/monaco-editor/min/vs/editor/editor.worker.js';
+    }
+};
+
 class CellManager {
     constructor() {
         this.cells = [];
+        this.editors = new Map(); // Store Monaco editor instances
         this.cellsList = document.getElementById('cellsList');
         this.template = document.getElementById('cellTemplate');
         this.saveButton = document.getElementById('saveButton');
@@ -21,10 +32,40 @@ class CellManager {
         
         cellDiv.dataset.cellId = cell.id;
         const titleInput = cellDiv.querySelector('.cell-title');
-        const editor = cellDiv.querySelector('.cell-editor');
+        const editorContainer = cellDiv.querySelector('.monaco-editor-container');
         
         titleInput.value = cell.title || '';
-        editor.value = cell.content || '';
+
+        // Create Monaco editor instance
+        const editor = monaco.editor.create(editorContainer, {
+            value: cell.content || '',
+            language: 'css',
+            theme: 'vs',
+            minimap: { enabled: false },
+            scrollBeyondLastLine: false,
+            lineNumbers: 'on',
+            roundedSelection: true,
+            automaticLayout: true,
+            wordWrap: 'on',
+            fontSize: 14,
+            tabSize: 2,
+            renderWhitespace: 'selection',
+            suggestOnTriggerCharacters: true,
+            quickSuggestions: {
+                other: true,
+                comments: true,
+                strings: true
+            },
+            snippetSuggestions: 'inline',
+            acceptSuggestionOnCommitCharacter: true,
+            acceptSuggestionOnEnter: 'on',
+            colorDecorators: true,
+            folding: true,
+            links: true
+        });
+
+        // Store editor instance
+        this.editors.set(cell.id, editor);
 
         // Setup cell controls
         cellDiv.querySelector('.move-up-button').addEventListener('click', () => this.moveCell(cell.id, 'up'));
@@ -33,7 +74,7 @@ class CellManager {
 
         // Enable save button when content changes
         titleInput.addEventListener('input', () => this.enableSave());
-        editor.addEventListener('input', () => this.enableSave());
+        editor.onDidChangeModelContent(() => this.enableSave());
 
         return cellDiv;
     }
@@ -41,6 +82,7 @@ class CellManager {
     async newFile() {
         try {
             await window.api.newFile();
+            this.disposeCellEditors(); // Clean up old editors
             this.cells = [];
             this.cellsList.innerHTML = '';
             this.addCell(); // Add one empty cell
@@ -54,6 +96,7 @@ class CellManager {
         try {
             const result = await window.api.openCssFile();
             if (result.success) {
+                this.disposeCellEditors(); // Clean up old editors
                 this.cells = result.cells;
                 this.renderCells();
                 this.saveButton.disabled = false;
@@ -94,6 +137,11 @@ class CellManager {
     deleteCell(cellId) {
         const index = this.cells.findIndex(cell => cell.id === cellId);
         if (index !== -1) {
+            const editor = this.editors.get(cellId);
+            if (editor) {
+                editor.dispose();
+                this.editors.delete(cellId);
+            }
             this.cells.splice(index, 1);
             this.renderCells();
             this.enableSave();
@@ -115,19 +163,28 @@ class CellManager {
 
     getCellsData() {
         return Array.from(this.cellsList.children).map(cellElement => {
+            const cellId = cellElement.dataset.cellId;
+            const editor = this.editors.get(cellId);
             return {
-                id: cellElement.dataset.cellId,
+                id: cellId,
                 title: cellElement.querySelector('.cell-title').value,
-                content: cellElement.querySelector('.cell-editor').value
+                content: editor ? editor.getValue() : ''
             };
         });
     }
 
     renderCells() {
+        this.disposeCellEditors(); // Clean up old editors
         this.cellsList.innerHTML = '';
         this.cells.forEach(cell => {
             this.cellsList.appendChild(this.createCellElement(cell));
         });
+    }
+
+    disposeCellEditors() {
+        // Clean up Monaco editor instances
+        this.editors.forEach(editor => editor.dispose());
+        this.editors.clear();
     }
 
     enableSave() {
@@ -135,6 +192,47 @@ class CellManager {
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+// Wait for Monaco to be loaded before initializing
+require(['vs/editor/editor.main'], () => {
+    // Configure Monaco CSS defaults
+    monaco.languages.css.cssDefaults.setOptions({
+        validate: true,
+        lint: {
+            compatibleVendorPrefixes: 'warning',
+            vendorPrefix: 'warning',
+            duplicateProperties: 'warning',
+            emptyRules: 'warning',
+            importStatement: 'warning',
+            boxModel: 'warning',
+            universalSelector: 'warning',
+            zeroUnits: 'warning',
+            fontFaceProperties: 'warning',
+            hexColorLength: 'warning',
+            argumentsInColorFunction: 'warning',
+            unknownProperties: 'warning',
+            ieHack: 'warning',
+            unknownVendorSpecificProperties: 'warning',
+            propertyIgnoredDueToDisplay: 'warning',
+            important: 'warning',
+            float: 'warning',
+            idSelector: 'warning'
+        },
+        completion: {
+            triggerSuggestOnEnter: true,
+            completePropertyWithSemicolon: true,
+        },
+        format: {
+            enable: true,
+            newlineBetweenSelectors: true,
+            newlineBetweenRules: true,
+            spaceAroundSelectorSeparator: true
+        },
+        colorDecorators: true,
+        diagnostics: true,
+        hover: true,
+        suggestions: true
+    });
+
+    // Initialize the CellManager after Monaco is ready
     new CellManager();
 });

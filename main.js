@@ -1,5 +1,5 @@
 // Modules to control application life and create native browser window
-const { app, BrowserWindow, ipcMain, dialog } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, protocol } = require('electron')
 const fs = require('fs').promises
 const path = require('node:path')
 
@@ -30,8 +30,8 @@ function generateCssFromCells(cells) {
 function createWindow () {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 800,
-    height: 600,
+    width: 1200,
+    height: 800,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -44,8 +44,27 @@ function createWindow () {
     properties: ['openFile', 'saveFile']
   })
 
+  // Set additional headers for security and static file serving
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self'; " +
+          "script-src 'self' 'unsafe-eval' 'unsafe-inline' blob:; " +
+          "style-src 'self' 'unsafe-inline'; " +
+          "worker-src blob:; " +
+          "font-src 'self' data:;"
+        ]
+      }
+    });
+  });
+
   // and load the index.html of the app.
   mainWindow.loadFile('index.html')
+
+  // Open DevTools in development
+  mainWindow.webContents.openDevTools()
 
   // Open the DevTools.
   // mainWindow.webContents.openDevTools()
@@ -55,6 +74,17 @@ function createWindow () {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
+  // Register protocol for serving local files
+  protocol.registerFileProtocol('file', (request, callback) => {
+    const url = request.url.replace('file:///', '');
+    try {
+      return callback(decodeURIComponent(url));
+    } catch (error) {
+      console.error(error);
+      return callback(404);
+    }
+  });
+
   createWindow()
 
   app.on('activate', function () {
