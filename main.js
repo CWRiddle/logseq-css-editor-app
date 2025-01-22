@@ -1,5 +1,5 @@
 // Modules to control application life and create native browser window
-const { app, BrowserWindow, ipcMain, dialog, protocol } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, protocol, net, session } = require('electron')
 const fs = require('fs').promises
 const path = require('node:path')
 
@@ -44,27 +44,50 @@ function createWindow () {
     properties: ['openFile', 'saveFile']
   })
 
-  // Set additional headers for security and static file serving
-  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+  // Configure session for Monaco Editor
+  const ses = mainWindow.webContents.session;
+  
+  // Set security headers
+  ses.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
         'Content-Security-Policy': [
-          "default-src 'self'; " +
-          "script-src 'self' 'unsafe-eval' 'unsafe-inline' blob:; " +
-          "style-src 'self' 'unsafe-inline'; " +
-          "worker-src blob:; " +
-          "font-src 'self' data:;"
-        ]
+          "default-src 'self';" +
+          "script-src 'self' 'unsafe-eval' 'unsafe-inline' blob:;" + // needed for Monaco
+          "style-src 'self' 'unsafe-inline';" +
+          "font-src 'self' data:;" +
+          "img-src 'self' data: blob:;" +
+          "worker-src blob:;" +
+          "child-src blob:;"
+        ],
+        'X-Content-Type-Options': ['nosniff'],
+        'X-Frame-Options': ['DENY'],
+        'X-XSS-Protection': ['1; mode=block']
       }
     });
+  });
+
+  // Configure protocol for serving local files
+  protocol.handle('file', (request) => {
+    let filePath = request.url.replace('file:///', '');
+    filePath = decodeURIComponent(filePath);
+    
+    // Handle Monaco editor files
+    if (filePath.includes('node_modules/monaco-editor')) {
+      filePath = path.join(__dirname, filePath);
+    }
+    
+    return net.fetch('file://' + filePath);
   });
 
   // and load the index.html of the app.
   mainWindow.loadFile('index.html')
 
   // Open DevTools in development
-  mainWindow.webContents.openDevTools()
+  if (process.env.NODE_ENV === 'development') {
+    mainWindow.webContents.openDevTools();
+  }
 
   // Open the DevTools.
   // mainWindow.webContents.openDevTools()
@@ -74,16 +97,10 @@ function createWindow () {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
-  // Register protocol for serving local files
-  protocol.registerFileProtocol('file', (request, callback) => {
-    const url = request.url.replace('file:///', '');
-    try {
-      return callback(decodeURIComponent(url));
-    } catch (error) {
-      console.error(error);
-      return callback(404);
-    }
-  });
+  // Register secure protocol for file serving
+  protocol.registerSchemesAsPrivileged([
+    { scheme: 'file', privileges: { secure: true, standard: true } }
+  ]);
 
   createWindow()
 

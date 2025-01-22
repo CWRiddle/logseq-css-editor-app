@@ -1,12 +1,10 @@
-// Configure Monaco's base path for workers
-self.MonacoEnvironment = {
-    getWorkerUrl: function (moduleId, label) {
-        if (label === 'css' || label === 'scss' || label === 'less') {
-            return './node_modules/monaco-editor/min/vs/language/css/css.worker.js';
-        }
-        return './node_modules/monaco-editor/min/vs/editor/editor.worker.js';
-    }
-};
+// Wait for Monaco to be ready before initializing the editor
+let monacoReady = false;
+window.addEventListener('monaco-ready', () => {
+    monacoReady = true;
+    // Initialize CellManager once Monaco is ready
+    new CellManager();
+});
 
 class CellManager {
     constructor() {
@@ -36,8 +34,9 @@ class CellManager {
         
         titleInput.value = cell.title || '';
 
-        // Create Monaco editor instance
-        const editor = monaco.editor.create(editorContainer, {
+        try {
+            // Create Monaco editor instance
+            const editor = monaco.editor.create(editorContainer, {
             value: cell.content || '',
             language: 'css',
             theme: 'vs',
@@ -62,10 +61,37 @@ class CellManager {
             colorDecorators: true,
             folding: true,
             links: true
-        });
+            });
 
-        // Store editor instance
-        this.editors.set(cell.id, editor);
+            // Configure editor features
+            editor.getModel().updateOptions({
+                tabSize: 2,
+                insertSpaces: true
+            });
+
+            // Store editor instance
+            this.editors.set(cell.id, editor);
+
+            // Add error handling for editor creation
+            editor.onDidChangeModelDecorations(() => {
+                const model = editor.getModel();
+                if (model === null) return;
+
+                const owner = model.getModeId();
+                const markers = monaco.editor.getModelMarkers({ owner });
+                
+                // Log validation errors if any
+                if (markers.length > 0) {
+                    console.log('CSS Validation Issues:', markers);
+                }
+            });
+        } catch (error) {
+            console.error('Error creating editor:', error);
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'editor-error';
+            errorDiv.textContent = 'Error initializing editor. Please try reloading the application.';
+            editorContainer.appendChild(errorDiv);
+        }
 
         // Setup cell controls
         cellDiv.querySelector('.move-up-button').addEventListener('click', () => this.moveCell(cell.id, 'up'));
@@ -191,48 +217,3 @@ class CellManager {
         this.saveButton.disabled = false;
     }
 }
-
-// Wait for Monaco to be loaded before initializing
-require(['vs/editor/editor.main'], () => {
-    // Configure Monaco CSS defaults
-    monaco.languages.css.cssDefaults.setOptions({
-        validate: true,
-        lint: {
-            compatibleVendorPrefixes: 'warning',
-            vendorPrefix: 'warning',
-            duplicateProperties: 'warning',
-            emptyRules: 'warning',
-            importStatement: 'warning',
-            boxModel: 'warning',
-            universalSelector: 'warning',
-            zeroUnits: 'warning',
-            fontFaceProperties: 'warning',
-            hexColorLength: 'warning',
-            argumentsInColorFunction: 'warning',
-            unknownProperties: 'warning',
-            ieHack: 'warning',
-            unknownVendorSpecificProperties: 'warning',
-            propertyIgnoredDueToDisplay: 'warning',
-            important: 'warning',
-            float: 'warning',
-            idSelector: 'warning'
-        },
-        completion: {
-            triggerSuggestOnEnter: true,
-            completePropertyWithSemicolon: true,
-        },
-        format: {
-            enable: true,
-            newlineBetweenSelectors: true,
-            newlineBetweenRules: true,
-            spaceAroundSelectorSeparator: true
-        },
-        colorDecorators: true,
-        diagnostics: true,
-        hover: true,
-        suggestions: true
-    });
-
-    // Initialize the CellManager after Monaco is ready
-    new CellManager();
-});
